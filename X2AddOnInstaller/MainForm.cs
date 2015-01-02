@@ -118,6 +118,9 @@ namespace X2AddOnInstaller
 				File.WriteAllBytes(aoe2Path + "age2_x1\\" + currFileName, currFile);
 			});
 
+			// TEMP: Alte age2_x2_1.dll löschen
+			File.Delete(aoe2Path + "age2_x1\\age2_x2_1.dll");
+
 			// Original-DRS-Dateien lesen
 			SetStatus("Lade Original-DRS-Dateien...");
 			Dictionary<string, DRSFile> drsFiles = new Dictionary<string, DRSFile>();

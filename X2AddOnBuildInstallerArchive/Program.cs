@@ -83,7 +83,7 @@ namespace X2AddOnBuildInstallerArchive
 					SevenZip.CoderPropID.MatchFinder,
 					SevenZip.CoderPropID.EndMarker
 				};
-				object[] codProperties = 
+				object[] codProps = 
 				{
 					Z_DICT_SIZE,
 					Z_POS_STATE_BITS,
@@ -94,7 +94,7 @@ namespace X2AddOnBuildInstallerArchive
 					Z_MF,
 					Z_EOS
 				};
-				encoder.SetCoderProperties(codPropIDs, codProperties);
+				encoder.SetCoderProperties(codPropIDs, codProps);
 				encoder.WriteCoderProperties(streamOut);
 			}
 
