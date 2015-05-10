@@ -9,14 +9,11 @@ namespace X2AddOnInstaller
 		/// Der Haupteinstiegspunkt für die Anwendung.
 		/// </summary>
 		[STAThread]
-		static int Main()
+		static void Main()
 		{
 			Application.EnableVisualStyles();
 			Application.SetCompatibleTextRenderingDefault(false);
 			Application.Run(new MainForm());
-
-			// Sonst meckert Windows, das Programm wäre nicht richtig installiert worden ;-)
-			return 0;
 		}
 	}
 }

@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.IO;
 using System.Text;
+using System.Diagnostics;
 
 namespace X2AddOnBuildInstallerArchive
 {
@@ -12,6 +13,15 @@ namespace X2AddOnBuildInstallerArchive
 	/// </summary>
 	class Program
 	{
+		#region Konstanten
+
+		/// <summary>
+		/// Der Pfad des erstellten Archivs.
+		/// </summary>
+		const string OUTPUT_PATH = "..\\..\\..\\X2AddOnInstaller\\bin\\Release\\X2AddOnInstaller.lzma";
+
+		#endregion
+
 		#region LZMA/7zip-Konstanten
 
 		const int Z_DICT_SIZE = 1 << 26; // 64 MB
@@ -31,9 +41,9 @@ namespace X2AddOnBuildInstallerArchive
 		/// Programmeinstiegspunkt.
 		/// </summary>
 		/// <param name="args">Die Kommandozeilenparameter.</param>
-		static int Main(string[] args)
+		static void Main(string[] args)
 		{
-			// Archiv erstellen
+			/*// Archiv erstellen
 			RAMBuffer buffer = new RAMBuffer();
 
 			// XML-Spezifikationen schreiben
@@ -66,7 +76,7 @@ namespace X2AddOnBuildInstallerArchive
 
 			// Ausgabearchiv erstellen
 			Console.WriteLine("Erstelle Ausgabestream...");
-			Stream streamOut = new FileStream("..\\..\\..\\X2AddOnInstaller\\bin\\Release\\X2AddOnInstaller.lzma", FileMode.Create, FileAccess.Write);
+			Stream streamOut = new FileStream(OUTPUT_PATH, FileMode.Create, FileAccess.Write);
 
 			// LZMA-Encoder konfigurieren
 			Console.WriteLine("Konfiguriere Encoder...");
@@ -113,12 +123,22 @@ namespace X2AddOnBuildInstallerArchive
 			// Streams schließen
 			Console.WriteLine("Schließe Streams...");
 			streamOut.Close();
-			streamIn.Close();
+			streamIn.Close();*/
+
+			// Neues Archiv auf den Server laden
+			Console.WriteLine("Lade Archiv hoch...");
+			string revision = "rev" + DateTime.Now.ToString("yyyyMMdd-HHmm");
+			var pushProc = new Process();
+			pushProc.StartInfo = new ProcessStartInfo("PushArchive.exe", "\"" + Path.GetFullPath(OUTPUT_PATH) + "\" " + revision)
+			{
+				UseShellExecute = false
+			};
+			pushProc.Start();
+			pushProc.WaitForExit();
 
 			// Fertig
-			Console.WriteLine("Fertig! Zum Beenden ENTER drücken...");
+			Console.WriteLine("Zum Beenden ENTER drücken...");
 			Console.ReadLine();
-			return 0; // Windows ist sonst der Meinung, das Programm wäre nicht korrekt installiert worden :D
 		}
 
 		/// <summary>

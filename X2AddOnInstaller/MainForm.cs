@@ -7,12 +7,31 @@ using System.Drawing;
 using System.Linq;
 using System.Text;
 using System.Windows.Forms;
+using System.Net;
 using IORAMHelper;
 
 namespace X2AddOnInstaller
 {
 	public partial class MainForm : Form
 	{
+		#region Konstanten
+
+		/// <summary>
+		/// Die Basis-Adresse zum Installationsserver.
+		/// </summary>
+		const string SERVER_BASE_URI = "http://localhost/x2/";
+
+		#endregion
+
+		#region Variablen
+
+		/// <summary>
+		/// Die aktuell installierte Version.
+		/// </summary>
+		string _installedRevision = "";
+
+		#endregion
+
 		#region Funktionen
 
 		/// <summary>
@@ -27,13 +46,13 @@ namespace X2AddOnInstaller
 		/// <summary>
 		/// Entpackt das übergebene LZMA-Archiv.
 		/// </summary>
-		/// <param name="filename">Das zu entpackende LZMA-Archiv.</param>
+		/// <param name="archive">Das zu entpackende LZMA-Archiv.</param>
 		/// <param name="aoe2Path">Der Ziel-Pfad.</param>
-		private void Unpack(string filename, string aoe2Path)
+		private void Unpack(byte[] archive, string aoe2Path)
 		{
 			// Eingabestream öffnen
 			SetStatus("Lade Installationsarchiv...");
-			Stream streamIn = new FileStream(filename, FileMode.Open, FileAccess.Read);
+			Stream streamIn = new MemoryStream(archive);
 
 			// Ausgabestream erstellen (alles in den Arbeitsspeicher schreiben)
 			Stream streamOut = new MemoryStream();
@@ -118,9 +137,6 @@ namespace X2AddOnInstaller
 				File.WriteAllBytes(aoe2Path + "age2_x1\\" + currFileName, currFile);
 			});
 
-			// TEMP: Alte age2_x2_1.dll löschen
-			File.Delete(aoe2Path + "age2_x1\\age2_x2_1.dll");
-
 			// Original-DRS-Dateien lesen
 			SetStatus("Lade Original-DRS-Dateien...");
 			Dictionary<string, DRSFile> drsFiles = new Dictionary<string, DRSFile>();
@@ -178,19 +194,32 @@ namespace X2AddOnInstaller
 
 		private void MainForm_Load(object sender, EventArgs e)
 		{
-			// Age of Empires II-Pfad aus der Registry holen
-			string aoe2p = "";
+			// Age of Empires II-Schlüssel suchen
+			string aoe2key = "SOFTWARE\\Microsoft\\Microsoft Games\\Age of Empires II: The Conquerors Expansion\\1.0";
 			try
 			{
-				// Pfad suchen
-				aoe2p = ((string)Microsoft.Win32.Registry.GetValue("HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Microsoft Games\\Age of Empires\\2.0", "InstallationDirectory", "")).Replace('/', '\\');
+				if(Microsoft.Win32.Registry.LocalMachine.OpenSubKey(aoe2key).SubKeyCount >= 0)
+					aoe2key = "HKEY_LOCAL_MACHINE\\" + aoe2key;
 			}
 			catch
-			{ }
+			{
+				try
+				{
+					if(Microsoft.Win32.Registry.CurrentUser.OpenSubKey(aoe2key).SubKeyCount >= 0)
+						aoe2key = "HKEY_CURRENT_USER\\" + aoe2key;
+				}
+				catch
+				{
+					aoe2key = "";
+					MessageBox.Show("Warnung: Kann AoE-II-Registrierungsschlüssel nicht finden. Bestimmen der installierten Version nicht möglich.\r\n" +
+						"Bitte stellen Sie sicher, dass eine ordnungsgemäße \"Age of Empires II: The Conquerors\"-Installation vorliegt.",
+						"Warnung", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+				}
+			}
 
-			// Pfad vorschlagen
-			_aoe2FolderTextBox.Text = aoe2p;
-			_folderDialog.SelectedPath = aoe2p;
+			// Aktuelle Revision herausfinden
+			if(aoe2key != "")
+				_installedRevision = (string)Microsoft.Win32.Registry.GetValue(aoe2key, "X2AddOnRevision", _installedRevision);
 		}
 
 		private void _exitButton_Click(object sender, EventArgs e)
@@ -211,8 +240,50 @@ namespace X2AddOnInstaller
 
 		private void _installButton_Click(object sender, EventArgs e)
 		{
+			// Neue Revision holen
+			SetStatus("Hole Installationsarchiv vom Server...");
+			byte[] revArchive = null;
+			try
+			{
+				revArchive = new WebClient().DownloadData(SERVER_BASE_URI + "archive");
+			}
+			catch(WebException)
+			{
+				// Fehler
+				MessageBox.Show("Fehler: Konnte das Installationsarchiv nicht herunterladen. Bitte überprüfen Sie Ihre Internetverbindung.", "Fehler", MessageBoxButtons.OK, MessageBoxIcon.Error);
+				SetStatus("Fehler.");
+				return;
+			}
+
 			// Datei entpacken
-			Unpack("X2AddOnInstaller.lzma", Path.GetFullPath(_aoe2FolderTextBox.Text) + "\\");
+			try
+			{
+				Unpack(revArchive, Path.GetFullPath(_aoe2FolderTextBox.Text) + "\\");
+			}
+			catch(Exception ex)
+			{
+				// Fehler
+				MessageBox.Show("Fehler: Das Installationsarchiv konnte nicht ordnungsgemäß entpackt werden. Möglicherweise fehlen Schreibrechte oder die Datei ist beschädigt.\r\n\r\nFehlermeldung: " + ex.Message, "Fehler", MessageBoxButtons.OK, MessageBoxIcon.Error);
+				SetStatus("Fehler.");
+			}
+		}
+
+		private void MainForm_Shown(object sender, EventArgs e)
+		{
+			// Neue Version vom Server holen
+			SetStatus("Hole aktuelle Versionsnummer vom Server...");
+			string _remoteRevision = "";
+			try
+			{
+				_remoteRevision = new WebClient().DownloadString(SERVER_BASE_URI + "revision");
+			}
+			catch { }
+
+			// Version gefunden?
+			if(_remoteRevision == "" || _remoteRevision == _installedRevision)
+				SetStatus("Keine neue Version verfügbar.");
+			else
+				SetStatus("Neue Version verfügbar: " + _remoteRevision + (_installedRevision == "" ? " (installiert: " + _installedRevision + ")" : ""));
 		}
 
 		#endregion
