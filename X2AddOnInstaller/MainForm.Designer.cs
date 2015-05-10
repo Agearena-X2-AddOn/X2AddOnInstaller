@@ -103,7 +103,7 @@
 			this._statusLabel.ForeColor = System.Drawing.Color.White;
 			this._statusLabel.Location = new System.Drawing.Point(1, 388);
 			this._statusLabel.Name = "_statusLabel";
-			this._statusLabel.Size = new System.Drawing.Size(421, 23);
+			this._statusLabel.Size = new System.Drawing.Size(600, 23);
 			this._statusLabel.TabIndex = 4;
 			// 
 			// MainForm

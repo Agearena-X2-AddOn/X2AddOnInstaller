@@ -43,7 +43,7 @@ namespace X2AddOnBuildInstallerArchive
 		/// <param name="args">Die Kommandozeilenparameter.</param>
 		static void Main(string[] args)
 		{
-			/*// Archiv erstellen
+			// Archiv erstellen
 			RAMBuffer buffer = new RAMBuffer();
 
 			// XML-Spezifikationen schreiben
@@ -123,7 +123,7 @@ namespace X2AddOnBuildInstallerArchive
 			// Streams schließen
 			Console.WriteLine("Schließe Streams...");
 			streamOut.Close();
-			streamIn.Close();*/
+			streamIn.Close();
 
 			// Neues Archiv auf den Server laden
 			Console.WriteLine("Lade Archiv hoch...");

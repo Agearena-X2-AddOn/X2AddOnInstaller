@@ -30,6 +30,16 @@ namespace X2AddOnInstaller
 		/// </summary>
 		string _installedRevision = "";
 
+		/// <summary>
+		/// Die letzte Version auf dem Server.
+		/// </summary>
+		string _remoteRevision = "";
+
+		/// <summary>
+		/// Der Registry-Key des Spiels.
+		/// </summary>
+		string _aoe2Key = "";
+
 		#endregion
 
 		#region Funktionen
@@ -158,6 +168,18 @@ namespace X2AddOnInstaller
 			SetStatus("Installiere neue DRS-Dateien...");
 			drsFiles.ToList().ForEach(currDRS => currDRS.Value.WriteData(rootFolderName + "Data\\" + currDRS.Key + ".drs"));
 
+			// Neue Revision speichern
+			if(_aoe2Key != "")
+				try
+				{
+					Microsoft.Win32.Registry.SetValue(_aoe2Key, "X2AddOnRevision", _remoteRevision);
+				}
+				catch
+				{
+					// Benachrichtigen
+					MessageBox.Show("Warnung: Konnte die neue Versionsnummer nicht speichern.", "Warnung", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+				}
+
 			// Fertig
 			SetStatus("Installation erfolgreich!");
 		}
@@ -195,22 +217,22 @@ namespace X2AddOnInstaller
 		private void MainForm_Load(object sender, EventArgs e)
 		{
 			// Age of Empires II-Schlüssel suchen
-			string aoe2key = "SOFTWARE\\Microsoft\\Microsoft Games\\Age of Empires II: The Conquerors Expansion\\1.0";
+			_aoe2Key = "SOFTWARE\\Microsoft\\Microsoft Games\\Age of Empires II: The Conquerors Expansion\\1.0";
 			try
 			{
-				if(Microsoft.Win32.Registry.LocalMachine.OpenSubKey(aoe2key).SubKeyCount >= 0)
-					aoe2key = "HKEY_LOCAL_MACHINE\\" + aoe2key;
+				if(Microsoft.Win32.Registry.LocalMachine.OpenSubKey(_aoe2Key).SubKeyCount >= 0)
+					_aoe2Key = "HKEY_LOCAL_MACHINE\\" + _aoe2Key;
 			}
 			catch
 			{
 				try
 				{
-					if(Microsoft.Win32.Registry.CurrentUser.OpenSubKey(aoe2key).SubKeyCount >= 0)
-						aoe2key = "HKEY_CURRENT_USER\\" + aoe2key;
+					if(Microsoft.Win32.Registry.CurrentUser.OpenSubKey(_aoe2Key).SubKeyCount >= 0)
+						_aoe2Key = "HKEY_CURRENT_USER\\" + _aoe2Key;
 				}
 				catch
 				{
-					aoe2key = "";
+					_aoe2Key = "";
 					MessageBox.Show("Warnung: Kann AoE-II-Registrierungsschlüssel nicht finden. Bestimmen der installierten Version nicht möglich.\r\n" +
 						"Bitte stellen Sie sicher, dass eine ordnungsgemäße \"Age of Empires II: The Conquerors\"-Installation vorliegt.",
 						"Warnung", MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -218,8 +240,8 @@ namespace X2AddOnInstaller
 			}
 
 			// Aktuelle Revision herausfinden
-			if(aoe2key != "")
-				_installedRevision = (string)Microsoft.Win32.Registry.GetValue(aoe2key, "X2AddOnRevision", _installedRevision);
+			if(_aoe2Key != "")
+				_installedRevision = (string)Microsoft.Win32.Registry.GetValue(_aoe2Key, "X2AddOnRevision", _installedRevision);
 		}
 
 		private void _exitButton_Click(object sender, EventArgs e)
@@ -265,6 +287,7 @@ namespace X2AddOnInstaller
 				// Fehler
 				MessageBox.Show("Fehler: Das Installationsarchiv konnte nicht ordnungsgemäß entpackt werden. Möglicherweise fehlen Schreibrechte oder die Datei ist beschädigt.\r\n\r\nFehlermeldung: " + ex.Message, "Fehler", MessageBoxButtons.OK, MessageBoxIcon.Error);
 				SetStatus("Fehler.");
+				return;
 			}
 		}
 
@@ -272,7 +295,6 @@ namespace X2AddOnInstaller
 		{
 			// Neue Version vom Server holen
 			SetStatus("Hole aktuelle Versionsnummer vom Server...");
-			string _remoteRevision = "";
 			try
 			{
 				_remoteRevision = new WebClient().DownloadString(SERVER_BASE_URI + "revision");
@@ -283,7 +305,7 @@ namespace X2AddOnInstaller
 			if(_remoteRevision == "" || _remoteRevision == _installedRevision)
 				SetStatus("Keine neue Version verfügbar.");
 			else
-				SetStatus("Neue Version verfügbar: " + _remoteRevision + (_installedRevision == "" ? " (installiert: " + _installedRevision + ")" : ""));
+				SetStatus("Neue Version verfügbar: " + _remoteRevision + (_installedRevision != "" ? " (installiert: " + _installedRevision + ")" : ""));
 		}
 
 		#endregion
