@@ -19,7 +19,7 @@ namespace X2AddOnInstaller
 		/// <summary>
 		/// Die Basis-Adresse zum Installationsserver.
 		/// </summary>
-		const string SERVER_BASE_URI = "http://localhost/x2/";
+		const string SERVER_BASE_URI = "http://www.agearena.de/x2/";
 
 		#endregion
 
@@ -38,7 +38,22 @@ namespace X2AddOnInstaller
 		/// <summary>
 		/// Der Registry-Key des Spiels.
 		/// </summary>
-		string _aoe2Key = "";
+		Microsoft.Win32.RegistryKey _aoe2Key = null;
+
+		/// <summary>
+		/// Das WebClient-Objekt für die Kommunikation mit dem Server.
+		/// </summary>
+		WebClient _webClient = new WebClient();
+
+		/// <summary>
+		/// Gibt an, ob die linke Maustaste aktuell gedrückt ist (zum Verschieben des Fensters).
+		/// </summary>
+		bool _mouseDown;
+
+		/// <summary>
+		/// Die letzte Position des Mauszeigers (zum Verschieben des Fensters).
+		/// </summary>
+		Point _lastLocation;
 
 		#endregion
 
@@ -51,6 +66,10 @@ namespace X2AddOnInstaller
 		{
 			// Steuerelemente laden
 			InitializeComponent();
+
+			// Ereignisse beim WebClient zuweisen
+			_webClient.DownloadDataCompleted += _webClient_DownloadDataCompleted;
+			_webClient.DownloadProgressChanged += _webClient_DownloadProgressChanged;
 		}
 
 		/// <summary>
@@ -97,9 +116,10 @@ namespace X2AddOnInstaller
 			streamOut.Read(data, 0, (int)outSize);
 			RAMBuffer buffer = new RAMBuffer(data);
 
-			// Sicherheitshalber Games-Verzeichnis anlegen
+			// Sicherheitshalber Games- und age2_x1-Verzeichnisse anlegen
 			string rootFolderName = aoe2Path + "Games\\";
 			Directory.CreateDirectory(rootFolderName);
+			Directory.CreateDirectory(aoe2Path + "age2_x1\\");
 
 			// XML-Spezifikationen lesen
 			SetStatus("Installiere XML-Spezifikationen...");
@@ -114,6 +134,8 @@ namespace X2AddOnInstaller
 				// Ordnerstruktur anlegen
 				Directory.CreateDirectory(rootFolderName);
 				Directory.CreateDirectory(rootFolderName + "Data");
+				Directory.CreateDirectory(rootFolderName + "Data\\de");
+				Directory.CreateDirectory(rootFolderName + "Data\\en");
 				Directory.CreateDirectory(rootFolderName + "SaveGame\\Multi");
 				Directory.CreateDirectory(rootFolderName + "Scenario");
 				Directory.CreateDirectory(rootFolderName + "Screenshots");
@@ -121,6 +143,7 @@ namespace X2AddOnInstaller
 				Directory.CreateDirectory(rootFolderName + "Script.RM");
 				Directory.CreateDirectory(rootFolderName + "Sound\\scenario");
 				Directory.CreateDirectory(rootFolderName + "Sound\\stream");
+				Directory.CreateDirectory(rootFolderName + "ProjectSources");
 			});
 
 			// Language-DLLs lesen
@@ -128,8 +151,16 @@ namespace X2AddOnInstaller
 			ReadArchiveBlock(buffer, (string currFileName, byte[] currFile) =>
 			{
 				// DLL-Datei speichern
-				File.WriteAllBytes(rootFolderName + "Data\\" + currFileName, currFile);
+				File.WriteAllBytes(rootFolderName + "Data\\de\\" + currFileName, currFile);
 			});
+			ReadArchiveBlock(buffer, (string currFileName, byte[] currFile) =>
+			{
+				// DLL-Datei speichern
+				File.WriteAllBytes(rootFolderName + "Data\\en\\" + currFileName, currFile);
+			});
+			string lang = (_languageGermanButton.Checked ? "de" : "en");
+			foreach(string langDllFile in Directory.GetFiles(rootFolderName + "Data\\" + lang + "\\"))
+				File.Copy(langDllFile, rootFolderName + "Data\\" + Path.GetFileName(langDllFile), true);
 
 			// Datendateien lesen
 			SetStatus("Installiere Datendateien...");
@@ -143,42 +174,57 @@ namespace X2AddOnInstaller
 			SetStatus("Installiere ausführbare Dateien...");
 			ReadArchiveBlock(buffer, (string currFileName, byte[] currFile) =>
 			{
-				// DAT-Datei speichern
+				// Ausführbare Datei speichern
 				File.WriteAllBytes(aoe2Path + "age2_x1\\" + currFileName, currFile);
 			});
 
-			// Original-DRS-Dateien lesen
-			SetStatus("Lade Original-DRS-Dateien...");
-			Dictionary<string, DRSFile> drsFiles = new Dictionary<string, DRSFile>();
-			drsFiles.Add("graphics", new DRSFile(aoe2Path + "DATA\\graphics.drs"));
-			drsFiles.Add("interfac", new DRSFile(aoe2Path + "DATA\\interfac.drs"));
-
-			// Ressourcen-Dateien lesen
-			SetStatus("Schreibe neue Ressourcen in DRS-Dateien...");
+			// DRS-Dateien lesen
+			SetStatus("Installiere DRS-Dateien...");
 			ReadArchiveBlock(buffer, (string currFileName, byte[] currFile) =>
 			{
-				// Datei umwandeln in ExternalFile-Objekt
-				DRSFile.ExternalFile extF = DRSFile.ExternalFile.FromBinary(new RAMBuffer(currFile));
-
-				// Daten in DRS schreiben
-				drsFiles[extF.DRSFile].AddReplaceRessource(new RAMBuffer(extF.Data), (ushort)extF.FileID, DRSFile.ReverseString(extF.ResourceType));
+				// DRS-Datei speichern
+				File.WriteAllBytes(rootFolderName + "Data\\" + currFileName, currFile);
 			});
 
-			// DRS-Dateien speichern
-			SetStatus("Installiere neue DRS-Dateien...");
-			drsFiles.ToList().ForEach(currDRS => currDRS.Value.WriteData(rootFolderName + "Data\\" + currDRS.Key + ".drs"));
+			// Projektdateien lesen
+			SetStatus("Extrahiere Projektdateien...");
+			ReadArchiveBlock(buffer, (string currFileName, byte[] currFile) =>
+			{
+				// Projektdatei speichern
+				File.WriteAllBytes(rootFolderName + "ProjectSources\\" + currFileName, currFile);
+			});
+
+			// KI-Dateien lesen
+			SetStatus("Extrahiere KI-Dateien...");
+			ReadArchiveBlock(buffer, (string currFileName, byte[] currFile) =>
+			{
+				// KI-Datei speichern
+				File.WriteAllBytes(rootFolderName + "Script.AI\\" + currFileName, currFile);
+			});
 
 			// Neue Revision speichern
-			if(_aoe2Key != "")
+			if(_aoe2Key != null)
 				try
 				{
-					Microsoft.Win32.Registry.SetValue(_aoe2Key, "X2AddOnRevision", _remoteRevision);
+					_aoe2Key.SetValue("AgearenaAddOnRevision", _remoteRevision);
 				}
 				catch
 				{
 					// Benachrichtigen
 					MessageBox.Show("Warnung: Konnte die neue Versionsnummer nicht speichern.", "Warnung", MessageBoxButtons.OK, MessageBoxIcon.Warning);
 				}
+
+			// Desktop-Icon erstellen
+			// Problem: Abhängigkeits-DLL muss mitgeliefert werden
+			/*if(MessageBox.Show("Desktop-Icon erstellen?", "Installation abschließen", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
+			{
+				string link = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "Agearena AddOn.lnk");
+				var shell = new IWshRuntimeLibrary.WshShell();
+				var shortcut = shell.CreateShortcut(link) as IWshRuntimeLibrary.IWshShortcut;
+				shortcut.TargetPath = aoe2Path + "age2_x1\\AgearenaAddOn.exe";
+				shortcut.WorkingDirectory = aoe2Path + "age2_x1";
+				shortcut.Save();
+			}*/
 
 			// Fertig
 			SetStatus("Installation erfolgreich!");
@@ -201,13 +247,15 @@ namespace X2AddOnInstaller
 		/// Setzt das Status-Label auf den gegebenen Text.
 		/// </summary>
 		/// <param name="text">Der Status-Text.</param>
-		private void SetStatus(string text)
+		/// <param name="isAsync">Gibt an, ob der Status von einem asynchronen Prozess aus aktualisiert wird.</param>
+		private void SetStatus(string text, bool isAsync = false)
 		{
-			// Test setzen
+			// Text setzen
 			_statusLabel.Text = text;
 
-			// Fenster aktualisieren
-			Application.DoEvents();
+			// Neu zeichnen
+			if(!isAsync)
+				Application.DoEvents();
 		}
 
 		#endregion
@@ -217,31 +265,33 @@ namespace X2AddOnInstaller
 		private void MainForm_Load(object sender, EventArgs e)
 		{
 			// Age of Empires II-Schlüssel suchen
-			_aoe2Key = "SOFTWARE\\Microsoft\\Microsoft Games\\Age of Empires II: The Conquerors Expansion\\1.0";
+			const string aoe2KeyBasePath = "SOFTWARE\\Microsoft\\Microsoft Games\\Age of Empires II: The Conquerors Expansion\\1.0";
 			try
 			{
-				if(Microsoft.Win32.Registry.LocalMachine.OpenSubKey(_aoe2Key).SubKeyCount >= 0)
-					_aoe2Key = "HKEY_LOCAL_MACHINE\\" + _aoe2Key;
-			}
-			catch
-			{
-				try
-				{
-					if(Microsoft.Win32.Registry.CurrentUser.OpenSubKey(_aoe2Key).SubKeyCount >= 0)
-						_aoe2Key = "HKEY_CURRENT_USER\\" + _aoe2Key;
-				}
-				catch
-				{
-					_aoe2Key = "";
-					MessageBox.Show("Warnung: Kann AoE-II-Registrierungsschlüssel nicht finden. Bestimmen der installierten Version nicht möglich.\r\n" +
+				// LocalMachine-Schlüssel abfragen
+				if((_aoe2Key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(aoe2KeyBasePath, Microsoft.Win32.RegistryKeyPermissionCheck.ReadWriteSubTree)) == null
+					|| _aoe2Key.ValueCount == 0)
+					if((_aoe2Key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(aoe2KeyBasePath, Microsoft.Win32.RegistryKeyPermissionCheck.ReadWriteSubTree)) == null
+						|| _aoe2Key.ValueCount == 0)
+						MessageBox.Show("Warnung: Kann AoE-II-Registrierungsschlüssel nicht finden. Bestimmen der installierten Version nicht möglich.\r\n" +
 						"Bitte stellen Sie sicher, dass eine ordnungsgemäße \"Age of Empires II: The Conquerors\"-Installation vorliegt.",
 						"Warnung", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-				}
+			}
+			catch(System.Security.SecurityException)
+			{
+				MessageBox.Show("Kein Zugriff auf die Registry.\r\nBitte stellen Sie sicher, dass das Installationsprogramm mit Administratorrechten ausgeführt wird.",
+					"Fehler", MessageBoxButtons.OK, MessageBoxIcon.Error);
 			}
 
-			// Aktuelle Revision herausfinden
-			if(_aoe2Key != "")
-				_installedRevision = (string)Microsoft.Win32.Registry.GetValue(_aoe2Key, "X2AddOnRevision", _installedRevision);
+			// Werte laden
+			if(_aoe2Key != null)
+			{
+				// Aktuelle Revision herausfinden
+				_installedRevision = (string)_aoe2Key.GetValue("AgearenaAddOnRevision", _installedRevision);
+
+				// AoE-II-Pfad holen
+				_aoe2FolderTextBox.Text = (string)_aoe2Key.GetValue("EXE Path", "");
+			}
 		}
 
 		private void _exitButton_Click(object sender, EventArgs e)
@@ -253,6 +303,8 @@ namespace X2AddOnInstaller
 		private void _folderSelectButton_Click(object sender, EventArgs e)
 		{
 			// Dialog anzeigen
+			if(Directory.Exists(_aoe2FolderTextBox.Text))
+				_folderDialog.SelectedPath = _aoe2FolderTextBox.Text;
 			if(_folderDialog.ShowDialog() == DialogResult.OK)
 			{
 				// Neuen Pfad merken
@@ -262,12 +314,21 @@ namespace X2AddOnInstaller
 
 		private void _installButton_Click(object sender, EventArgs e)
 		{
-			// Neue Revision holen
+			// Steuerelemente blockieren
+			_aoe2FolderTextBox.Enabled = false;
+			_folderSelectButton.Enabled = false;
+			_languageGermanButton.Enabled = false;
+			_languageEnglishButton.Enabled = false;
+			_installButton.Enabled = false;
+
+			// Datei holen
 			SetStatus("Hole Installationsarchiv vom Server...");
-			byte[] revArchive = null;
 			try
 			{
-				revArchive = new WebClient().DownloadData(SERVER_BASE_URI + "archive");
+				// Asynchron, um Fortschrittsanzeige darstellen zu können
+				_webClient.DownloadDataAsync(new Uri(SERVER_BASE_URI + "archive?mode=preview"));
+				while(_webClient.IsBusy)
+					Application.DoEvents();
 			}
 			catch(WebException)
 			{
@@ -276,19 +337,34 @@ namespace X2AddOnInstaller
 				SetStatus("Fehler.");
 				return;
 			}
+		}
 
+		private void _webClient_DownloadProgressChanged(object sender, DownloadProgressChangedEventArgs e)
+		{
+			// Status aktualisieren
+			SetStatus("Hole Installationsarchiv vom Server..." + e.ProgressPercentage + "% (" + (e.BytesReceived / 1000).ToString("N0") + " kB von " + (e.TotalBytesToReceive / 1000).ToString("N0") + " kB)", true);
+		}
+
+		private void _webClient_DownloadDataCompleted(object sender, DownloadDataCompletedEventArgs e)
+		{
 			// Datei entpacken
 			try
 			{
-				Unpack(revArchive, Path.GetFullPath(_aoe2FolderTextBox.Text) + "\\");
+				Unpack(e.Result, Path.GetFullPath(_aoe2FolderTextBox.Text) + "\\");
 			}
 			catch(Exception ex)
 			{
 				// Fehler
-				MessageBox.Show("Fehler: Das Installationsarchiv konnte nicht ordnungsgemäß entpackt werden. Möglicherweise fehlen Schreibrechte oder die Datei ist beschädigt.\r\n\r\nFehlermeldung: " + ex.Message, "Fehler", MessageBoxButtons.OK, MessageBoxIcon.Error);
+				MessageBox.Show("Fehler: Das Installationsarchiv konnte nicht ordnungsgemäß entpackt werden. Bitte stellen Sie sicher, dass das Installationsprogramm mit Administratorrechten ausgeführt wird.\r\n\r\nFehlermeldung: " + ex.Message, "Fehler", MessageBoxButtons.OK, MessageBoxIcon.Error);
 				SetStatus("Fehler.");
-				return;
 			}
+
+			// Steuerelemente freischalten
+			_aoe2FolderTextBox.Enabled = true;
+			_folderSelectButton.Enabled = true;
+			_languageGermanButton.Enabled = true;
+			_languageEnglishButton.Enabled = true;
+			_installButton.Enabled = true;
 		}
 
 		private void MainForm_Shown(object sender, EventArgs e)
@@ -297,7 +373,7 @@ namespace X2AddOnInstaller
 			SetStatus("Hole aktuelle Versionsnummer vom Server...");
 			try
 			{
-				_remoteRevision = new WebClient().DownloadString(SERVER_BASE_URI + "revision");
+				_remoteRevision = _webClient.DownloadString(SERVER_BASE_URI + "revision?mode=preview");
 			}
 			catch { }
 
@@ -308,6 +384,29 @@ namespace X2AddOnInstaller
 				SetStatus("Neue Version verfügbar: " + _remoteRevision + (_installedRevision != "" ? " (installiert: " + _installedRevision + ")" : ""));
 		}
 
+		private void MainForm_MouseDown(object sender, MouseEventArgs e)
+		{
+			// Fenster-Verschieben aktivieren
+			_mouseDown = true;
+			_lastLocation = e.Location;
+		}
+
+		private void MainForm_MouseMove(object sender, MouseEventArgs e)
+		{
+			// Fenster verschieben
+			if(_mouseDown)
+			{
+				Location = new Point(Location.X - _lastLocation.X + e.X, Location.Y - _lastLocation.Y + e.Y);
+				Update();
+			}
+		}
+
+		private void MainForm_MouseUp(object sender, MouseEventArgs e)
+		{
+			// Fenster-Verschieben deaktivieren
+			_mouseDown = false;
+		}
+		
 		#endregion
 	}
 }

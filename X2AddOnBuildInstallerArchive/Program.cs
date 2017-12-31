@@ -10,6 +10,17 @@ namespace X2AddOnBuildInstallerArchive
 {
 	/// <summary>
 	/// Dieses Programm erstellt das Installer-Daten-Archiv.
+	/// 
+	/// Folgende Ordner müssen im Ausführordner existieren (ggf. als symbolischer Link):
+	/// -> data/base: Enthält Basisdateien, die beim Erstellen des Archivs erweitert werden. Aktuell nur gamedata_x1_p1.drs.
+	/// -> data/xml: Die XML-Infodatei für den UserPatch.
+	/// -> data/dll/de: Die deutschen Sprachdateien.
+	/// -> data/dll/en: Die englischen Sprachdateien.
+	/// -> data/dat: Die Datendatei.
+	/// -> data/exe: Die ausführbaren Dateien für den age2_x1-Ordner.
+	/// -> data/drs: Die Ressourcen-Container-Dateien (DRS). Die gamedata_x1_p1.drs (aus dem base-Ordner) wird automatisch mit den im nächsten Schritt übergebenen Ressourcen-Dateien befüllt, wird daher hier nicht berücksichtigt.
+	/// -> data/res: Die Ressourcen-Dateien des DRS-Explorer (werden automatisch in die gamedata_x1_p1.drs-Datei geschrieben und kommen nicht direkt ins Archiv).
+	/// -> data/projects: Die Projektdateien für etwaige genutzte Editor-Programme, zu Moddingzwecken.
 	/// </summary>
 	class Program
 	{
@@ -52,7 +63,8 @@ namespace X2AddOnBuildInstallerArchive
 
 			// Language-DLLs schreiben
 			Console.WriteLine("Schreibe Language-DLLs...");
-			WriteDirectoryToArchive(buffer, "data/dll");
+			WriteDirectoryToArchive(buffer, "data/dll/de");
+			WriteDirectoryToArchive(buffer, "data/dll/en");
 
 			// Datendateien schreiben
 			Console.WriteLine("Schreibe Datendateien...");
@@ -62,9 +74,31 @@ namespace X2AddOnBuildInstallerArchive
 			Console.WriteLine("Schreibe ausfuehrbare Dateien...");
 			WriteDirectoryToArchive(buffer, "data/exe");
 
-			// Ressourcen-Dateien schreiben
-			Console.WriteLine("Schreibe Ressourcen-Dateien...");
-			WriteDirectoryToArchive(buffer, "data/res");
+			// Ressourcendateien in gamedata_x1_p1.drs schreiben
+			Console.WriteLine("Erzeuge gamedata_x1_p1.drs aus Ressourcendateien...");
+			DRSFile gamedataDrs = new DRSFile("data/base/gamedata_x1_p1.drs");
+			string[] resFiles = Directory.GetFiles("data/res");
+			for(int i = 0; i < resFiles.Length; ++i)
+			{
+				// Ressourcen-Datei laden
+				Console.Write("\r{0} von {1}", i + 1, resFiles.Length);
+				DRSFile.ExternalFile currRes = DRSFile.ExternalFile.FromBinary(new RAMBuffer(resFiles[i]));
+				gamedataDrs.AddReplaceRessource(new RAMBuffer(currRes.Data), (ushort)currRes.FileID, DRSFile.ReverseString(currRes.ResourceType));
+			}
+			gamedataDrs.WriteData("data/drs/gamedata_x1_p1.drs");
+			Console.WriteLine();
+
+			// DRS-Dateien schreiben
+			Console.WriteLine("Schreibe DRS-Dateien...");
+			WriteDirectoryToArchive(buffer, "data/drs");
+
+			// Projektdateien schreiben
+			Console.WriteLine("Schreibe Projektdateien...");
+			WriteDirectoryToArchive(buffer, "data/projects");
+
+			// Projektdateien schreiben
+			Console.WriteLine("Schreibe KI-Dateien...");
+			WriteDirectoryToArchive(buffer, "data/ai");
 
 			// Eingabestream erstellen
 			Console.WriteLine("Erstelle Eingabestream...");
@@ -82,7 +116,7 @@ namespace X2AddOnBuildInstallerArchive
 			Console.WriteLine("Konfiguriere Encoder...");
 			SevenZip.Compression.LZMA.Encoder encoder = new SevenZip.Compression.LZMA.Encoder();
 			{
-				SevenZip.CoderPropID[] codPropIDs = 
+				SevenZip.CoderPropID[] codPropIDs =
 				{
 					SevenZip.CoderPropID.DictionarySize,
 					SevenZip.CoderPropID.PosStateBits,
@@ -93,7 +127,7 @@ namespace X2AddOnBuildInstallerArchive
 					SevenZip.CoderPropID.MatchFinder,
 					SevenZip.CoderPropID.EndMarker
 				};
-				object[] codProps = 
+				object[] codProps =
 				{
 					Z_DICT_SIZE,
 					Z_POS_STATE_BITS,
